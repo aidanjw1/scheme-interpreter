@@ -5,6 +5,7 @@
 #include "talloc.h"
 #include "assert.h"
 #include "linkedlist.h"
+#include "tokenizer.h"
 #include "parser.h"
 
 Value *lookUpSymbol(Value *symbol, Frame *frame) {
@@ -20,6 +21,7 @@ Value *lookUpSymbol(Value *symbol, Frame *frame) {
     }
     else {
         printf("%s: undefined; cannot reference an identifier before its definition", symbol->s);
+        texit(1);
     }
 }
 
@@ -70,6 +72,9 @@ Value *evalLet(Value* args, Frame *frame) {
                 printf("let: duplicate identifier in: %s", car(binding)->s);
                 texit(1);
             }
+            if (car(cdr(binding))->type == SYMBOL_TYPE) {
+                binding = cons(car(binding), lookUpSymbol(car(cdr(binding)), frame));
+            }
             newFrame->bindings = cons(binding, newFrame->bindings);
             current = cdr(current);
         }
@@ -81,6 +86,85 @@ Value *evalLet(Value* args, Frame *frame) {
 
     return eval(body, newFrame);
 }
+
+Value *evalWhen(Value* args, Frame *frame) {
+    Value *condition = eval(car(args), frame);
+    if(condition->type != BOOL_TYPE) {
+        printf("Evaluation Error");
+        texit(1);
+    }
+    Value *result = makeNull();
+    if(!strcmp(condition->s, "#f")) {
+        return result;
+
+    }
+    Value *whenArgs = cdr(args);
+    while (whenArgs->type != NULL_TYPE) {
+        result = eval(car(whenArgs),  frame);
+        whenArgs = cdr(whenArgs);
+    }
+    return result;
+}
+
+Value *evalUnless(Value* args, Frame *frame) {
+    Value *condition = eval(car(args), frame);
+    if(condition->type != BOOL_TYPE) {
+        printf("Evaluation Error");
+        texit(1);
+    }
+    Value *result = makeNull();
+    if(!strcmp(condition->s, "#t")) {
+        return result;
+
+    }
+    Value *whenArgs = cdr(args);
+    while (whenArgs->type != NULL_TYPE) {
+        result = eval(car(whenArgs),  frame);
+        whenArgs = cdr(whenArgs);
+    }
+    return result;
+}
+
+Value *evalDisplay(Value *args, Frame *frame) {
+    if(length(args) != 1) {
+        printf("Args, bruh");
+        texit(1);
+    }
+    Value *arg = car(args);
+    if (arg->type == STR_TYPE) {
+        char *newString = talloc(sizeof(char[255]));
+        newString[0] = '\0';
+        if (arg->s[1] == '"') {
+            newString = "\0";
+        }
+        else {
+            int current = 1;
+            while (arg->s[current] != '"') {
+                newString[current-1] = arg->s[current];
+                ++current;
+            }
+            newString[current-1] = '\0';
+        }
+        Value *new = makeNull();
+        new->type = STR_TYPE;
+        new->s = newString;
+        return new;
+    }
+    else if (arg->type == CONS_TYPE) {
+        Value *new = makeNull();
+        Value *current = arg;
+        while (current->type != NULL_TYPE) {
+            Value *newCell = cons(car(current), makeNull());
+            Value *s = evalDisplay(newCell, frame);
+            new = cons(s, new);
+            current = cdr(current);
+        }
+        new = reverse(new);
+        return new;
+    }
+    return eval(car(args), frame);
+}
+
 void interpret(Value *tree) {
     Frame *global = talloc(sizeof(Frame));
     global->bindings = makeNull();
@@ -110,7 +194,6 @@ Value *eval(Value *expr, Frame *frame) {
         }
         case SYMBOL_TYPE: {
             return lookUpSymbol(expr, frame);
-            break;
         }
         case CONS_TYPE: {
             Value *first = car(expr);
@@ -118,15 +201,8 @@ Value *eval(Value *expr, Frame *frame) {
 
             // Error checking
             Value *result = makeNull();
-            if (first->type != SYMBOL_TYPE) {
-                Value *current = expr;
-                while(current->type != NULL_TYPE) {
-                    result = cons(eval(car(current), frame), result);
-                    current = cdr(current);
-                }
-                return result;
-            }
-            else if (!strcmp(first->s,"if")) {
+
+            if (!strcmp(first->s,"if")) {
                 result = evalIf(args,frame);
                 return result;
             }
@@ -134,6 +210,22 @@ Value *eval(Value *expr, Frame *frame) {
                 result = evalLet(args,frame);
                 return result;
             }
+
+            else if (!strcmp(first->s,"display")) {
+                result = evalDisplay(cdr(expr), frame);
+                return result;
+            }
+
+            else if (!strcmp(first->s,"when")) {
+                result = evalWhen(cdr(expr), frame);
+                return result;
+            }
+
+            else if (!strcmp(first->s,"unless")) {
+                result = evalUnless(cdr(expr), frame);
+                return result;
+            }
+
             return newTree;
         }
         default:
