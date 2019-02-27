@@ -120,7 +120,7 @@ Value *tokenizeNumber(char *charRead, char sign) {
             }
             type = DOUBLE_TYPE;
         }
-        else if (isParenOrQuote((charRead)) || *charRead == EOF || *charRead == (char)10) {
+        else if (isParenOrQuote((charRead)) || *charRead == EOF || *charRead == (char)10 || *charRead == (char)13) {
             break;
         }
         else if (!isdigit(*charRead)) {

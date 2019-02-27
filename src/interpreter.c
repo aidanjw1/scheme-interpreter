@@ -127,7 +127,8 @@ Value *evalUnless(Value* args, Frame *frame) {
 
 Value *evalDisplay(Value *args, Frame *frame) {
     if(length(args) != 1) {
-        printf("Args, bruh");
+        printf("display: arity mismatch;\n"
+               " the expected number of arguments does not match the given number.");
         texit(1);
     }
     Value *arg = car(args);
@@ -150,19 +151,22 @@ Value *evalDisplay(Value *args, Frame *frame) {
         new->s = newString;
         return new;
     }
-    else if (arg->type == CONS_TYPE) {
-        Value *new = makeNull();
-        Value *current = arg;
-        while (current->type != NULL_TYPE) {
-            Value *newCell = cons(car(current), makeNull());
-            Value *s = evalDisplay(newCell, frame);
-            new = cons(s, new);
-            current = cdr(current);
-        }
-        new = reverse(new);
-        return new;
+    else {
+        return eval(arg, frame);
     }
-    return eval(car(args), frame);
+//    else if (arg->type == CONS_TYPE) {
+//        Value *new = makeNull();
+//        Value *current = arg;
+//        while (current->type != NULL_TYPE) {
+//            Value *newCell = cons(car(current), makeNull());
+//            Value *s = evalDisplay(newCell, frame);
+//            new = cons(s, new);
+//            current = cdr(current);
+//        }
+//        new = reverse(new);
+//        return new;
+//    }
+    //return eval(car(args), frame);
 }
 
 void interpret(Value *tree) {
@@ -200,8 +204,13 @@ Value *eval(Value *expr, Frame *frame) {
             Value *args = cdr(expr);
 
             // Error checking
-            Value *result = makeNull();
+            if (first->type != SYMBOL_TYPE) {
+                printf("application: not a procedure;\n"
+                       " expected a procedure that can be applied to arguments");
+                texit(1);
+            }
 
+            Value *result = makeNull();
             if (!strcmp(first->s,"if")) {
                 result = evalIf(args,frame);
                 return result;
@@ -229,6 +238,13 @@ Value *eval(Value *expr, Frame *frame) {
             else if (!strcmp(first->s,"quote")) {
                 result = cdr(expr);
                 return result;
+            }
+
+            else {
+                printf("application: not a procedure;\n"
+                       " expected a procedure that can be applied to arguments\n"
+                       "given: %s", first->s);
+                texit(1);
             }
 
             return newTree;
