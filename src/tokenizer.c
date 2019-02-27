@@ -170,7 +170,8 @@ Value *tokenizeBoolean(char *charRead) {
         boolVal->s = new;
         return boolVal;
     }
-    else if(!(isParenOrQuote(charRead) || *charRead == (char)32)) {
+    else if(!(isParenOrQuote(charRead) || *charRead == (char)32 || *charRead == EOF
+            || *charRead == (char)10 || *charRead == (char)13)) {
         printf("Syntax Error: Missing space after boolean");
         texit(1);
     }

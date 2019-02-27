@@ -226,6 +226,11 @@ Value *eval(Value *expr, Frame *frame) {
                 return result;
             }
 
+            else if (!strcmp(first->s,"quote")) {
+                result = cdr(expr);
+                return result;
+            }
+
             return newTree;
         }
         default:
