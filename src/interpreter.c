@@ -8,6 +8,9 @@
 #include "tokenizer.h"
 #include "parser.h"
 
+
+// Checks for the value of a symbol if it has been defined in the current frame
+// Returns error if undefined so far
 Value *lookUpSymbol(Value *symbol, Frame *frame) {
     Value *current = frame->bindings;
     while (current->type != NULL_TYPE) {
@@ -23,8 +26,10 @@ Value *lookUpSymbol(Value *symbol, Frame *frame) {
         printf("%s: undefined; cannot reference an identifier before its definition", symbol->s);
         texit(1);
     }
+    return symbol;
 }
 
+// Checks if a symbol has already been defined, to prevent duplicates.
 bool symbolDefined(Value *symbol, Value *bindings) {
     Value *current = bindings;
     while (current->type != NULL_TYPE) {
@@ -36,6 +41,9 @@ bool symbolDefined(Value *symbol, Value *bindings) {
     return false;
 }
 
+// Evaluates the arguments of an if statement.
+// If true, returns first arg
+// If false, returns second arg
 Value *evalIf(Value *args, Frame *frame) {
     if (length(args) != 3) {
         printf("if: bad syntax in if");
@@ -56,13 +64,20 @@ Value *evalIf(Value *args, Frame *frame) {
     }
 }
 
+// Evaluates the arguments of a let statement
+// Creates a set of bindings, evaluates the al other arguments
+// Returns the last argument
 Value *evalLet(Value* args, Frame *frame) {
+    if (length(args) < 2) {
+        printf("let: bad syntax (missing binding pairs or body)");
+        texit(1);
+    }
     Frame *newFrame = talloc(sizeof(Frame));
     newFrame->parent = frame;
     newFrame->bindings = makeNull();
 
     Value *letBindings = car(args);
-    Value *body = car(cdr(args));
+    Value *body = cdr(args);
 
     Value *current = letBindings;
     while(current->type != NULL_TYPE) {
@@ -83,10 +98,17 @@ Value *evalLet(Value* args, Frame *frame) {
             texit(1);
         }
     }
-
-    return eval(body, newFrame);
+    Value *result = makeNull();
+    while (body->type != NULL_TYPE) {
+        result = eval(car(body), newFrame);
+        body = cdr(body);
+    }
+    return result;
 }
 
+// Evaluates arguments of a when statement
+// If true, evaluates all and returns the last
+// If false, returns null
 Value *evalWhen(Value* args, Frame *frame) {
     Value *condition = eval(car(args), frame);
     if(condition->type != BOOL_TYPE) {
@@ -106,6 +128,9 @@ Value *evalWhen(Value* args, Frame *frame) {
     return result;
 }
 
+// Evaluates arguments of an unless statement
+// If false, evaluates all and returns the last
+// If true, returns null
 Value *evalUnless(Value* args, Frame *frame) {
     Value *condition = eval(car(args), frame);
     if(condition->type != BOOL_TYPE) {
@@ -125,6 +150,8 @@ Value *evalUnless(Value* args, Frame *frame) {
     return result;
 }
 
+// Evaluates argument of a display statement
+// Returns the value to be displayed
 Value *evalDisplay(Value *args, Frame *frame) {
     if(length(args) != 1) {
         printf("display: arity mismatch;\n"
@@ -169,6 +196,8 @@ Value *evalDisplay(Value *args, Frame *frame) {
     //return eval(car(args), frame);
 }
 
+// Calls evaluation on the parse tree,
+// Prints out each evaluation to a new line.
 void interpret(Value *tree) {
     Frame *global = talloc(sizeof(Frame));
     global->bindings = makeNull();
@@ -181,6 +210,8 @@ void interpret(Value *tree) {
         current = cdr(current);
     }
 }
+
+// Evaluates the parse tree returned by our parser, token by token.
 Value *eval(Value *expr, Frame *frame) {
     Value *newTree = makeNull();
     switch(expr->type) {
@@ -210,7 +241,7 @@ Value *eval(Value *expr, Frame *frame) {
                 texit(1);
             }
 
-            Value *result = makeNull();
+            Value *result;
             if (!strcmp(first->s,"if")) {
                 result = evalIf(args,frame);
                 return result;
@@ -233,6 +264,9 @@ Value *eval(Value *expr, Frame *frame) {
             else if (!strcmp(first->s,"unless")) {
                 result = evalUnless(cdr(expr), frame);
                 return result;
+            }
+            else if (!strcmp(first->s,"quote")) {
+                return cdr(expr);
             }
             else {
                 printf("application: not a procedure;\n"

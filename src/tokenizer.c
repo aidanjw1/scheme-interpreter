@@ -112,7 +112,7 @@ Value *tokenizeNumber(char *charRead, char sign) {
     valueType type = INT_TYPE;
     char* new = talloc(sizeof(char[255]));
     new[0] = '\0';
-    while(*charRead != (char)32) {
+    while(*charRead != (char)32 && *charRead != EOF && *charRead != (char)10 && *charRead != (char)13) {
         if(*charRead == '.') {
             if (type == DOUBLE_TYPE) {
                 printf("Syntax error: Multiple use of dot within number");
@@ -170,7 +170,7 @@ Value *tokenizeBoolean(char *charRead) {
         boolVal->s = new;
         return boolVal;
     }
-    else if(!(isParenOrQuote(charRead) || *charRead == (char)32)) {
+    else if(!(isParenOrQuote(charRead) || *charRead == (char)32 || *charRead == (char)10 || *charRead == (char)13)) {
         printf("Syntax Error: Missing space after boolean");
         texit(1);
     }
@@ -249,7 +249,7 @@ Value *tokenize(char *inputFileName) {
                 list = cons(makeStringValue(&sign, SYMBOL_TYPE), list);
             }
             else if (isdigit(charRead)){
-                tokenizeNumber(&charRead, sign);
+                list = cons(tokenizeNumber(&charRead, sign), list);
             }
             else {
                 printf("Syntax error: Symbol starting with +/-");

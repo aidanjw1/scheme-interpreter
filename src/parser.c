@@ -49,9 +49,7 @@ Value *addToParseTree(Value *tree, int *depth, int *depthB, Value *token) {
         *depthB += 1;
         return cons(token, tree);
     }
-    else {
-        return cons(token, tree);
-    }
+    return cons(token, tree);
 }
 // Takes a list of tokens from a Racket program, and returns a pointer to a
 // parse tree representing that program.
