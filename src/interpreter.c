@@ -179,21 +179,12 @@ Value *evalDisplay(Value *args, Frame *frame) {
         return new;
     }
     else {
-        return eval(arg, frame);
+        Value *result = eval(arg, frame);
+        if (result->type == STR_TYPE) {
+            result = evalDisplay(cons(result, makeNull()), frame);
+        }
+        return result;
     }
-//    else if (arg->type == CONS_TYPE) {
-//        Value *new = makeNull();
-//        Value *current = arg;
-//        while (current->type != NULL_TYPE) {
-//            Value *newCell = cons(car(current), makeNull());
-//            Value *s = evalDisplay(newCell, frame);
-//            new = cons(s, new);
-//            current = cdr(current);
-//        }
-//        new = reverse(new);
-//        return new;
-//    }
-    //return eval(car(args), frame);
 }
 
 // Calls evaluation on the parse tree,
