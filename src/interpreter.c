@@ -159,6 +159,8 @@ Value *evalDisplay(Value *args, Frame *frame) {
         texit(1);
     }
     Value *arg = car(args);
+    Value *new = makeNull();
+    new->type = VOID_TYPE;
     if (arg->type == STR_TYPE) {
         char *newString = talloc(sizeof(char[255]));
         newString[0] = '\0';
@@ -173,9 +175,7 @@ Value *evalDisplay(Value *args, Frame *frame) {
             }
             newString[current-1] = '\0';
         }
-        Value *new = makeNull();
-        new->type = STR_TYPE;
-        new->s = newString;
+        printf("%s", newString);
         return new;
     }
     else {
@@ -183,8 +183,116 @@ Value *evalDisplay(Value *args, Frame *frame) {
         if (result->type == STR_TYPE) {
             result = evalDisplay(cons(result, makeNull()), frame);
         }
-        return result;
+        printTree(result);
+        return new;
     }
+}
+
+// Evaluates argument of a lambda function
+// Returns a closure with the proper code
+Value *evalLambda(Value *args, Frame *frame){
+    Value *closure = makeNull();
+    closure->type = CLOSURE_TYPE;
+    closure->cl.frame = frame;
+
+    Value *params = car(args);
+    Value *current = params;
+    while(current->type != NULL_TYPE) {
+        if(car(current)->type != SYMBOL_TYPE) {
+            printf("lambda: not an identifier");
+            texit(1);
+        }
+        current = cdr(current);
+    }
+    closure->cl.paramNames = params;
+
+    Value *body = cdr(args);
+    closure->cl.functionCode = body;
+    return closure;
+}
+
+// Evaluates body of a define function
+// Returns void_type Value*, creates binding in current frame
+Value *evalDefine(Value *args, Frame *frame) {
+    Value *v = makeNull();
+    v->type = VOID_TYPE;
+    if(length(args) < 2) {
+        printf("define: bad syntax");
+        texit(1);
+    }
+    else if(length(args) > 2) {
+        printf("define: bad syntax (multiple expressions after identifier)");
+        texit(1);
+    }
+    Value *var = car(args);
+    Value *expr = car(cdr(args));
+
+    if (var->type == CONS_TYPE) {
+        Value *first = car(var);
+        if(first->type != SYMBOL_TYPE) {
+            printf("define: bad syntax (not an identifier for procedure name, and not a nested procedure form)");
+            texit(1);
+        }
+        Value *closure1 = evalLambda(cons(cdr(var), cdr(args)), frame);
+        Value *binding = cons(first, cons(closure1, makeNull()));
+        frame->bindings = cons(binding, frame->bindings);
+        return v;
+    }
+
+    if(var->type != SYMBOL_TYPE) {
+        printf("define: not an identifier for procedure argument");
+        texit(1);
+    }
+    Value *binding = cons(var, cons(eval(expr, frame), makeNull()));
+    frame->bindings = cons(binding, frame->bindings);
+    return v;
+}
+
+// Applies the code of a closure to given arguments
+Value *apply(Value *function, Value *args) {
+    if(function->type != CLOSURE_TYPE) {
+        printf("application: not a procedure;\n"
+               " expected a procedure that can be applied to arguments");
+        texit(1);
+    }
+
+    Frame *frame = talloc(sizeof(Frame));
+    frame->parent = function->cl.frame;
+
+    Value *currentParam = function->cl.paramNames;
+    Value *currentArg = args;
+    if (length(currentParam) != length(currentArg)) {
+        printf("#<procedure>: arity mismatch;\n"
+               " the expected number of arguments does not match the given number\n");
+        texit(1);
+    }
+    while(currentParam->type != NULL_TYPE) {
+        Value *binding = makeNull();
+        binding = cons(car(currentParam), cons(car(currentArg), binding));
+        frame->bindings = cons(binding, frame->bindings);
+        currentParam = cdr(currentParam);
+        currentArg = cdr(currentArg);
+    }
+    Value *current = function->cl.functionCode;
+    Value *result = makeNull();
+    while(current->type != NULL_TYPE){
+        result = eval(car(current), frame);
+        current = cdr(current);
+    }
+    return result;
+}
+
+// Evaluates a each argument in a list of arguments.
+Value *evalEach(Value *args, Frame *frame) {
+    Value *current = args;
+    Value *newArgs = makeNull();
+    while (current->type != NULL_TYPE) {
+        Value *result = eval(car(current), frame);
+        newArgs = cons(result, newArgs);
+        current = cdr(current);
+    }
+    newArgs = reverse(newArgs);
+    return newArgs;
 }
 
 // Calls evaluation on the parse tree,
@@ -196,8 +304,10 @@ void interpret(Value *tree) {
     Value *current = tree;
     while(current->type != NULL_TYPE) {
         Value *result = eval(car(current), global);
-        printTree(result);
-        printf("\n");
+        if (result->type != VOID_TYPE) {
+            printTree(result);
+            printf("\n");
+        }
         current = cdr(current);
     }
 }
@@ -226,7 +336,7 @@ Value *eval(Value *expr, Frame *frame) {
             Value *args = cdr(expr);
 
             // Error checking
-            if (first->type != SYMBOL_TYPE) {
+            if (first->type != SYMBOL_TYPE && first->type != CLOSURE_TYPE) {
                 printf("application: not a procedure;\n"
                        " expected a procedure that can be applied to arguments");
                 texit(1);
@@ -256,14 +366,26 @@ Value *eval(Value *expr, Frame *frame) {
                 result = evalUnless(cdr(expr), frame);
                 return result;
             }
+
             else if (!strcmp(first->s,"quote")) {
                 return cdr(expr);
             }
+
+            else if (!strcmp(first->s,"define")) {
+                return evalDefine(cdr(expr), frame);
+            }
+
+            else if (!strcmp(first->s,"lambda")) {
+                return evalLambda(cdr(expr), frame);
+            }
+
             else {
-                printf("application: not a procedure;\n"
-                       " expected a procedure that can be applied to arguments\n"
-                       "given: %s", first->s);
-                texit(1);
+
+                // If not a special form, evaluate the first, evaluate the args, then
+                // apply the first to the args.
+                Value *evaledOperator = eval(first, frame);
+                Value *evaledArgs = evalEach(args, frame);
+                return apply(evaledOperator,evaledArgs);
             }
         }
         default:

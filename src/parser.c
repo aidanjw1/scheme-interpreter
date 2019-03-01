@@ -96,6 +96,9 @@ void printTree(Value *tree) {
             case SYMBOL_TYPE:
                 printf("%s", tree->s);
                 break;
+            case CLOSURE_TYPE:
+                printf("#<procedure>");
+                break;
             default:
                 break;
         }
