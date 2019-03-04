@@ -14,8 +14,10 @@
 Value *lookUpSymbol(Value *symbol, Frame *frame) {
     Value *current = frame->bindings;
     while (current->type != NULL_TYPE) {
-        if (!strcmp(car(car(current))->s, symbol->s)) {
-            return car(cdr(car(current)));
+        Value *param1 = car(car(current));
+        Value *bind1 = car(cdr(car(current)));
+        if (!strcmp(param1->s, symbol->s)) {
+            return bind1;
         }
         current = cdr(current);
     }
@@ -87,8 +89,9 @@ Value *evalLet(Value* args, Frame *frame) {
                 printf("let: duplicate identifier in: %s", car(binding)->s);
                 texit(1);
             }
-            if (car(cdr(binding))->type == SYMBOL_TYPE) {
-                binding = cons(car(binding), lookUpSymbol(car(cdr(binding)), frame));
+            if (car(cdr(binding))->type == SYMBOL_TYPE || car(cdr(binding))->type == CONS_TYPE) {
+                Value *test = cons(eval(car(cdr(binding)), frame), makeNull());
+                binding = cons(car(binding), test);
             }
             newFrame->bindings = cons(binding, newFrame->bindings);
             current = cdr(current);
@@ -234,7 +237,8 @@ Value *evalDefine(Value *args, Frame *frame) {
             texit(1);
         }
         Value *closure1 = evalLambda(cons(cdr(var), cdr(args)), frame);
-        Value *binding = cons(first, cons(closure1, makeNull()));
+        Value *binding = makeNull();
+        binding = cons(first, cons(closure1, binding));
         frame->bindings = cons(binding, frame->bindings);
         return v;
     }
@@ -243,7 +247,8 @@ Value *evalDefine(Value *args, Frame *frame) {
         printf("define: not an identifier for procedure argument");
         texit(1);
     }
-    Value *binding = cons(var, cons(eval(expr, frame), makeNull()));
+    Value *binding = makeNull();
+    binding = cons(var, cons(eval(expr, frame), binding));
     frame->bindings = cons(binding, frame->bindings);
     return v;
 }
@@ -258,6 +263,7 @@ Value *apply(Value *function, Value *args) {
 
     Frame *frame = talloc(sizeof(Frame));
     frame->parent = function->cl.frame;
+    frame->bindings = makeNull();
 
     Value *currentParam = function->cl.paramNames;
     Value *currentArg = args;
