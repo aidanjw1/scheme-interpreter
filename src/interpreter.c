@@ -298,7 +298,128 @@ Value *evalEach(Value *args, Frame *frame) {
         current = cdr(current);
     }
     newArgs = reverse(newArgs);
+    newArgs = cons(newArgs, makeNull());
     return newArgs;
+}
+
+void bind(char *name, Value *(*function)(struct Value *), Frame *frame) {
+    Value *val = talloc(sizeof(Value));
+    val->type = PRIMITIVE_TYPE;
+    val->pf = function;
+    Value *symbol = talloc(sizeof(Value));
+    symbol->type = SYMBOL_TYPE;
+    symbol->s = name;
+    Value *binding = cons(symbol, cons(val, makeNull()));
+    frame->bindings = cons(binding, frame->bindings);
+}
+
+Value *primitiveAdd(Value *args) {
+    int resulti = 0;
+    double resultd = 0;
+    Value *current = args;
+    Value *value = makeNull();
+    value->type = INT_TYPE;
+    while (current->type != NULL_TYPE) {
+        if (car(current)->type == INT_TYPE) {
+            resulti += car(current)->i;
+        }
+        else if (car(current)->type == DOUBLE_TYPE) {
+            resultd += car(current)->d;
+            value->type = DOUBLE_TYPE;
+        }
+        else {
+            printf("+: contract violation\n"
+                   "  expected: number?");
+        }
+        current = cdr(current);
+    }
+    if (value->type == DOUBLE_TYPE) {
+        value->d = resulti + resultd;
+    }
+    else {
+        value->i = resulti;
+    }
+    return value;
+}
+
+Value *primitiveNull(Value *args) {
+    if (length(args) != 1) {
+        printf("null?: arity mismatch;\n"
+               " the expected number of arguments does not match the given number");
+        texit(1);
+    }
+    Value *value = makeNull();
+    value->type = BOOL_TYPE;
+    value->s = "#t";
+    if (car(args)->type != NULL_TYPE) {
+        value->s = "#f";
+    }
+    return value;
+}
+
+Value *primitiveCar(Value *args) {
+    if(length(args) != 1) {
+        printf("car: arity mismatch;\n"
+               " the expected number of arguments does not match the given number");
+        texit(1);
+    }
+    Value *lst = car(args);
+    return car(car(lst));
+}
+
+Value *primitiveCdr(Value *args) {
+    if(length(args) != 1) {
+        printf("cdr: arity mismatch;\n"
+               " the expected number of arguments does not match the given number");
+        texit(1);
+    }
+    Value *lst = car(args);
+    return cdr(car(lst));
+}
+
+Value *primitiveCons(Value *args) {
+    args = car(args);
+    if(length(args) != 2) {
+        printf("cons: arity mismatch;\n"
+               " the expected number of arguments does not match the given number");
+        texit(1);
+    }
+    Value *consCell = cons(car(args), car(cdr(args)));
+    return consCell;
+}
+
+
+Value *primitiveEqual(Value *args) {
+    args = car(args);
+    if(length(args) != 2) {
+        printf("equal?: arity mismatch;\n"
+               " the expected number of arguments does not match the given number");
+        texit(1);
+    }
+    Value *first = car(args);
+    Value *second = car(cdr(args));
+    Value *valueT = makeNull();
+    valueT->type = BOOL_TYPE;
+    valueT->s = "#t";
+    Value *valueF = makeNull();
+    valueF->type = BOOL_TYPE;
+    valueF->s = "#f";
+
+    if (first->type == second->type) {
+        switch(first->type) {
+            case INT_TYPE: {
+                if (first->i == second->i) {
+                    return valueT;
+                }
+            }
+            case DOUBLE_TYPE: {
+                if (first->d == second->d) {
+                    return valueT;
+                }
+            }
+            //case
+        }
+    }
 }
 
 // Calls evaluation on the parse tree,
@@ -308,6 +429,13 @@ void interpret(Value *tree) {
     global->bindings = makeNull();
     global->parent = NULL;
     Value *current = tree;
+
+    bind("+",primitiveAdd,global);
+    bind("null?", primitiveNull, global);
+    bind("car", primitiveCar, global);
+    bind("cdr", primitiveCdr, global);
+    bind("cons", primitiveCons, global);
+
     while(current->type != NULL_TYPE) {
         Value *result = eval(car(current), global);
         if (result->type != VOID_TYPE) {
@@ -374,7 +502,11 @@ Value *eval(Value *expr, Frame *frame) {
             }
 
             else if (!strcmp(first->s,"quote")) {
-                return cdr(expr);
+                if (length(args) != 1) {
+                    printf("quote: bad syntax");
+                    texit(1);
+                }
+                return car(cdr(expr));
             }
 
             else if (!strcmp(first->s,"define")) {
@@ -386,11 +518,13 @@ Value *eval(Value *expr, Frame *frame) {
             }
 
             else {
-
                 // If not a special form, evaluate the first, evaluate the args, then
                 // apply the first to the args.
                 Value *evaledOperator = eval(first, frame);
                 Value *evaledArgs = evalEach(args, frame);
+                if (evaledOperator->type == PRIMITIVE_TYPE) {
+                    return evaledOperator->pf(evaledArgs);
+                }
                 return apply(evaledOperator,evaledArgs);
             }
         }

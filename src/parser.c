@@ -76,70 +76,130 @@ Value *parse(Value *tokens) {
     return tree;
 }
 
+//// Prints the tree to the screen in a readable fashion. It should look just like
+//// Racket code; use parentheses to indicate subtrees.
+//void printTree(Value *tree) {
+//    if(tree->type != CONS_TYPE) {
+//        switch (tree->type) {
+//            case INT_TYPE:
+//                printf("%i", tree->i);
+//                break;
+//            case DOUBLE_TYPE:
+//                printf("%f", tree->d);
+//                break;
+//            case STR_TYPE:
+//                printf("%s", tree->s);
+//                break;
+//            case BOOL_TYPE:
+//                printf("%s", tree->s);
+//                break;
+//            case SYMBOL_TYPE:
+//                printf("%s", tree->s);
+//                break;
+//            case CLOSURE_TYPE:
+//                printf("#<procedure>");
+//                break;
+//            default:
+//                break;
+//        }
+//    }
+//
+//    Value *newTree = tree;
+//    while (newTree->type == CONS_TYPE) {
+//        printf("(");
+//        Value *carTree = car(newTree);
+//        switch (carTree->type) {
+//            case CONS_TYPE:
+//                printTree(carTree);
+//                break;
+//            case INT_TYPE:
+//                printf("%i", carTree->i);
+//                break;
+//            case DOUBLE_TYPE:
+//                printf("%f", carTree->d);
+//                break;
+//            case STR_TYPE:
+//                printf("%s", carTree->s);
+//                break;
+//            case BOOL_TYPE:
+//                printf("%s", carTree->s);
+//                break;
+//            case SYMBOL_TYPE:
+//                printf("%s", carTree->s);
+//                break;
+//            case DOT_TYPE:
+//                printf("%s", carTree->s);
+//                break;
+//            case SINGLE_QUOTE_TYPE:
+//                printf("%s", carTree->s);
+//            default:
+//                break;
+//        }
+//        newTree = cdr(newTree);
+//        if (newTree->type != NULL_TYPE && carTree->type != SINGLE_QUOTE_TYPE) {
+//            printf(" ");
+//        }
+//    }
+//    printf(")");
+//}
+
+// Print the Value of a single token
+void printToken(Value *token) {
+    valueType type = token->type;
+    switch(type) {
+        case INT_TYPE:
+            printf("%i", token->i);
+            break;
+        case DOUBLE_TYPE:
+            printf("%f", token->d);
+            break;
+        case SYMBOL_TYPE:
+            printf("%s", token->s);
+            break;
+        case STR_TYPE:
+            printf("%s", token->s);
+            break;
+        case BOOL_TYPE:
+            printf("%s", token->s);
+            break;
+        case CLOSURE_TYPE:
+            printf("#<procedure>");
+            break;
+        case NULL_TYPE:
+            break;
+        default:
+            printf("Another token type");
+            break;
+    }
+}
+
 // Prints the tree to the screen in a readable fashion. It should look just like
 // Racket code; use parentheses to indicate subtrees.
 void printTree(Value *tree) {
+    //assert(tree->type == CONS_TYPE);
     if(tree->type != CONS_TYPE) {
-        switch (tree->type) {
-            case INT_TYPE:
-                printf("%i", tree->i);
-                break;
-            case DOUBLE_TYPE:
-                printf("%f", tree->d);
-                break;
-            case STR_TYPE:
-                printf("%s", tree->s);
-                break;
-            case BOOL_TYPE:
-                printf("%s", tree->s);
-                break;
-            case SYMBOL_TYPE:
-                printf("%s", tree->s);
-                break;
-            case CLOSURE_TYPE:
-                printf("#<procedure>");
-                break;
-            default:
-                break;
-        }
+        printToken(tree);
+        return;
     }
-
-    Value *newTree = tree;
-    while (newTree->type == CONS_TYPE) {
-        Value *carTree = car(newTree);
-        switch (carTree->type) {
-            case CONS_TYPE:
-                printf("(");
-                printTree(carTree);
-                printf(")");
-                break;
-            case INT_TYPE:
-                printf("%i", carTree->i);
-                break;
-            case DOUBLE_TYPE:
-                printf("%f", carTree->d);
-                break;
-            case STR_TYPE:
-                printf("%s", carTree->s);
-                break;
-            case BOOL_TYPE:
-                printf("%s", carTree->s);
-                break;
-            case SYMBOL_TYPE:
-                printf("%s", carTree->s);
-                break;
-            case DOT_TYPE:
-                printf("%s", carTree->s);
-                break;
-            case SINGLE_QUOTE_TYPE:
-                printf("%s", carTree->s);
-            default:
-                break;
+    printf("(");
+    Value *current = tree;
+    while(current->type == CONS_TYPE) {
+        valueType carType = car(current)->type;
+        if (carType == CONS_TYPE) {
+            printTree(car(current));
         }
-        newTree = cdr(newTree);
-        if (newTree->type != NULL_TYPE && carTree->type != SINGLE_QUOTE_TYPE) {
+        else {
+            printToken(car(current));
+        }
+        current = cdr(current);
+        if (current->type != NULL_TYPE && current->type != SINGLE_QUOTE_TYPE) {
             printf(" ");
         }
     }
+    if (current->type != NULL_TYPE) {
+        printf(". ");
+        printToken(current);
+    }
+    printf(")");
 }
 
