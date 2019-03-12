@@ -166,6 +166,7 @@ void printToken(Value *token) {
             printf("#<procedure>");
             break;
         case NULL_TYPE:
+            printf("()");
             break;
         default:
             printf("Another token type");

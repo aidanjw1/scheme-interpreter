@@ -302,6 +302,7 @@ Value *evalEach(Value *args, Frame *frame) {
     return newArgs;
 }
 
+// Bind a string to a primitive function.
 void bind(char *name, Value *(*function)(struct Value *), Frame *frame) {
     Value *val = talloc(sizeof(Value));
     val->type = PRIMITIVE_TYPE;
@@ -313,10 +314,11 @@ void bind(char *name, Value *(*function)(struct Value *), Frame *frame) {
     frame->bindings = cons(binding, frame->bindings);
 }
 
+// Primitive function for adding numbers.
 Value *primitiveAdd(Value *args) {
     int resulti = 0;
     double resultd = 0;
-    Value *current = args;
+    Value *current = car(args);
     Value *value = makeNull();
     value->type = INT_TYPE;
     while (current->type != NULL_TYPE) {
@@ -342,6 +344,7 @@ Value *primitiveAdd(Value *args) {
     return value;
 }
 
+// Primitive function for checking if something is nothing (whaaa? ¯\_(ツ)_/¯)
 Value *primitiveNull(Value *args) {
     if (length(args) != 1) {
         printf("null?: arity mismatch;\n"
@@ -357,6 +360,7 @@ Value *primitiveNull(Value *args) {
     return value;
 }
 
+// Primitive function for getting the car of a cons cell.
 Value *primitiveCar(Value *args) {
     if(length(args) != 1) {
         printf("car: arity mismatch;\n"
@@ -367,6 +371,7 @@ Value *primitiveCar(Value *args) {
     return car(car(lst));
 }
 
+// Primitive function for getting the cdr of a cons cell.
 Value *primitiveCdr(Value *args) {
     if(length(args) != 1) {
         printf("cdr: arity mismatch;\n"
@@ -377,6 +382,7 @@ Value *primitiveCdr(Value *args) {
     return cdr(car(lst));
 }
 
+// Primitive function for creating a cons cell from two arguments.
 Value *primitiveCons(Value *args) {
     args = car(args);
     if(length(args) != 2) {
@@ -388,7 +394,71 @@ Value *primitiveCons(Value *args) {
     return consCell;
 }
 
+// Primitive function for creating a list from the arguments.
+Value *primitiveList(Value *args) {
+    args = car(args);
+    return args;
+}
 
+// Primitive function for appending values to a list.
+Value *primitiveAppend(Value *args) {
+    args = car(args);
+    if (length(args) == 0) {
+        return makeNull();
+    }
+    else if (length(args) == 1) {
+        return car(args);
+    }
+
+    Value *newList = makeNull();
+    Value *current = args;
+    while (current->type != NULL_TYPE) {
+        if(car(current)->type != CONS_TYPE && cdr(current)->type != NULL_TYPE) {
+            printf("append: contract violation\n"
+                   "  expected: list?");
+            texit(1);
+        }
+        if(car(current)->type == CONS_TYPE) {
+            Value *innerCurrent = car(current);
+            while(innerCurrent->type != NULL_TYPE) {
+                newList = cons(car(innerCurrent), newList);
+                innerCurrent = cdr(innerCurrent);
+            }
+        }
+        else {
+            newList = cons(car(current), newList);
+        }
+        current = cdr(current);
+    }
+    newList = reverse(newList);
+    return newList;
+
+}
+
+// Primitive function for eq, return #t if v1 and v2 refer to the same object, #f otherwise.
+Value *primitiveEq(Value *args) {
+    args = car(args);
+    if(length(args) != 2) {
+        printf("eq?: arity mismatch;\n"
+               " the expected number of arguments does not match the given number");
+        texit(1);
+    }
+    Value *first = car(args);
+    Value *second = car(cdr(args));
+    Value *valueT = makeNull();
+    valueT->type = BOOL_TYPE;
+    valueT->s = "#t";
+    Value *valueF = makeNull();
+    valueF->type = BOOL_TYPE;
+    valueF->s = "#f";
+
+    if (first != second) {
+        return valueF;
+    }
+    return valueT;
+}
+
+// Primitive function for equality, compares if values of two Values are equal
 Value *primitiveEqual(Value *args) {
     args = car(args);
     if(length(args) != 2) {
@@ -411,16 +481,107 @@ Value *primitiveEqual(Value *args) {
                 if (first->i == second->i) {
                     return valueT;
                 }
+                return valueF;
             }
             case DOUBLE_TYPE: {
                 if (first->d == second->d) {
                     return valueT;
                 }
+                return valueF;
             }
-            //case
+            case CONS_TYPE: {
+                Value *currentFirst = first;
+                Value *currentSecond = second;
+                while(currentFirst->type != NULL_TYPE) {
+                    Value *newArgs = cons(cons(car(currentFirst), cons(car(currentSecond), makeNull())), makeNull());
+                    if(!(strcmp(primitiveEqual(newArgs)->s, "#f"))) {
+                        return valueF;
+                    }
+                    currentFirst = cdr(currentFirst);
+                    currentSecond = cdr(currentSecond);
+                }
+                return valueT;
+            }
+            case NULL_TYPE: {
+                return valueT;
+            }
+            default: {
+                if(!strcmp(first->s, second->s)) {
+                    return valueT;
+                }
+                return valueF;
+            }
         }
     }
+    return valueF;
 }
+
+// Primitive function for >. Compare integer values.
+Value *primitiveGreaterThan(Value *args) {
+    args = car(args);
+    Value *valueT = makeNull();
+    valueT->type = BOOL_TYPE;
+    valueT->s = "#t";
+    Value *valueF = makeNull();
+    valueF->type = BOOL_TYPE;
+    valueF->s = "#f";
+
+    if(length(args) == 0) {
+        printf(">: arity mismatch;\n"
+               " the expected number of arguments does not match the given number");
+        texit(1);
+    }
+
+    Value *current = args;
+    int previous = car(current)->i;
+    while(current->type != NULL_TYPE) {
+        if(car(current)->type != INT_TYPE) {
+            printf(">: contract violation\n"
+                   "  expected: number?");
+            texit(1);
+        }
+        if(car(current)->i >= previous) {
+            return valueF;
+        }
+        previous = car(current)->i;
+        current = cdr(current);
+    }
+    return valueT;
+}
+
+// Primitive function for <. Compare integer values
+Value *primitiveLessThan(Value *args) {
+    args = car(args);
+    Value *valueT = makeNull();
+    valueT->type = BOOL_TYPE;
+    valueT->s = "#t";
+    Value *valueF = makeNull();
+    valueF->type = BOOL_TYPE;
+    valueF->s = "#f";
+
+    if(length(args) == 0) {
+        printf("<: arity mismatch;\n"
+               " the expected number of arguments does not match the given number");
+        texit(1);
+    }
+
+    Value *current = args;
+    int previous = car(current)->i;
+    while(current->type != NULL_TYPE) {
+        if(car(current)->type != INT_TYPE) {
+            printf("<: contract violation\n"
+                   "  expected: number?");
+            texit(1);
+        }
+        if(car(current)->i <= previous) {
+            return valueF;
+        }
+        previous = car(current)->i;
+        current = cdr(current);
+    }
+    return valueT;
+}
+
 
 // Calls evaluation on the parse tree,
 // Prints out each evaluation to a new line.
@@ -435,6 +596,13 @@ void interpret(Value *tree) {
     bind("car", primitiveCar, global);
     bind("cdr", primitiveCdr, global);
     bind("cons", primitiveCons, global);
+    bind("equal?", primitiveEqual, global);
+    bind("eq?", primitiveEq, global);
+    bind("append", primitiveAppend, global);
+    bind(">", primitiveGreaterThan, global);
+    bind("<", primitiveLessThan, global);
+    bind("list", primitiveList, global);
+
 
     while(current->type != NULL_TYPE) {
         Value *result = eval(car(current), global);
@@ -470,6 +638,9 @@ Value *eval(Value *expr, Frame *frame) {
             Value *args = cdr(expr);
 
             // Error checking
+            if (first->type == CONS_TYPE) {
+                return apply(eval(first, frame), args);
+            }
             if (first->type != SYMBOL_TYPE && first->type != CLOSURE_TYPE) {
                 printf("application: not a procedure;\n"
                        " expected a procedure that can be applied to arguments");
