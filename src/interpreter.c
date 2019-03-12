@@ -344,7 +344,7 @@ Value *primitiveAdd(Value *args) {
     return value;
 }
 
-// Primitive function for checking if something is nothing (whaaa? ¯\_(ツ)_/¯)
+// Primitive function for checking if something is nothing (whaa? ¯\_(ツ)_/¯)
 Value *primitiveNull(Value *args) {
     args = car(args);
     if (length(args) != 1) {
