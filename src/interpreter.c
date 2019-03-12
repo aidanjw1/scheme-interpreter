@@ -266,7 +266,7 @@ Value *apply(Value *function, Value *args) {
     frame->bindings = makeNull();
 
     Value *currentParam = function->cl.paramNames;
-    Value *currentArg = args;
+    Value *currentArg = car(args);
     if (length(currentParam) != length(currentArg)) {
         printf("#<procedure>: arity mismatch;\n"
                " the expected number of arguments does not match the given number\n");
@@ -346,6 +346,7 @@ Value *primitiveAdd(Value *args) {
 
 // Primitive function for checking if something is nothing (whaaa? ¯\_(ツ)_/¯)
 Value *primitiveNull(Value *args) {
+    args = car(args);
     if (length(args) != 1) {
         printf("null?: arity mismatch;\n"
                " the expected number of arguments does not match the given number");
@@ -362,24 +363,36 @@ Value *primitiveNull(Value *args) {
 
 // Primitive function for getting the car of a cons cell.
 Value *primitiveCar(Value *args) {
+    args = car(args);
     if(length(args) != 1) {
         printf("car: arity mismatch;\n"
                " the expected number of arguments does not match the given number");
         texit(1);
     }
+    if(car(args)->type != CONS_TYPE) {
+        printf("car: contract violation\n"
+               "  expected: pair?");
+        texit(1);
+    }
     Value *lst = car(args);
-    return car(car(lst));
+    return car(lst);
 }
 
 // Primitive function for getting the cdr of a cons cell.
 Value *primitiveCdr(Value *args) {
+    args = car(args);
     if(length(args) != 1) {
         printf("cdr: arity mismatch;\n"
                " the expected number of arguments does not match the given number");
         texit(1);
     }
+    if(car(args)->type != CONS_TYPE) {
+        printf("cdr: contract violation\n"
+               "  expected: pair?");
+        texit(1);
+    }
     Value *lst = car(args);
-    return cdr(car(lst));
+    return cdr(lst);
 }
 
 // Primitive function for creating a cons cell from two arguments.
