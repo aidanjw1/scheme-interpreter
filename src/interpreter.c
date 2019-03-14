@@ -332,6 +332,7 @@ Value *primitiveAdd(Value *args) {
         else {
             printf("+: contract violation\n"
                    "  expected: number?");
+            texit(1);
         }
         current = cdr(current);
     }
@@ -339,6 +340,54 @@ Value *primitiveAdd(Value *args) {
         value->d = resulti + resultd;
     }
     else {
+        value->i = resulti;
+    }
+    return value;
+}
+
+// Primitive function for subtracting numbers.
+Value *primitiveSubtract(Value *args) {
+    int resulti;
+    double resultd;
+    Value *current = car(args);
+    Value *value = makeNull();
+    value->type = INT_TYPE;
+    if (length(current) < 2) {
+        resulti = 0;
+        resultd = 0;
+    }
+    else {
+        if (car(current)->type == INT_TYPE) {
+            resulti = car(current)->i;
+            current = cdr(current);
+        }
+        else if (car(current)->type == DOUBLE_TYPE) {
+            resultd = car(current)->d;
+            value->type = DOUBLE_TYPE;
+            current = cdr(current);
+        }
+        else {
+            printf("-: contract violation\n"
+                   "  expected: number?");
+            texit(1);
+        }
+    }
+    while (current->type != NULL_TYPE) {
+        if (car(current)->type == INT_TYPE) {
+            resulti -= car(current)->i;
+        } else if (car(current)->type == DOUBLE_TYPE) {
+            resultd -= car(current)->d;
+            value->type = DOUBLE_TYPE;
+        } else {
+            printf("-: contract violation\n"
+                   "  expected: number?");
+            texit(1);
+        }
+        current = cdr(current);
+    }
+    if (value->type == DOUBLE_TYPE) {
+        value->d = resulti + resultd;
+    } else {
         value->i = resulti;
     }
     return value;
@@ -362,6 +411,7 @@ Value *primitiveMult(Value *args) {
         else {
             printf("*: contract violation\n"
                    "  expected: number?");
+            texit(1);
         }
         current = cdr(current);
     }
@@ -705,6 +755,7 @@ void interpret(Value *tree) {
     bind("list", primitiveList, global);
     bind("*", primitiveMult, global);
     bind("/", primitiveDivide, global);
+    bind("-", primitiveSubtract, global);
 
 
     while(current->type != NULL_TYPE) {
