@@ -344,6 +344,94 @@ Value *primitiveAdd(Value *args) {
     return value;
 }
 
+// Primitive function for multiplying numbers.
+Value *primitiveMult(Value *args) {
+    int resulti = 1;
+    double resultd = 1;
+    Value *current = car(args);
+    Value *value = makeNull();
+    value->type = INT_TYPE;
+    while (current->type != NULL_TYPE) {
+        if (car(current)->type == INT_TYPE) {
+            resulti *= car(current)->i;
+        }
+        else if (car(current)->type == DOUBLE_TYPE) {
+            resultd *= car(current)->d;
+            value->type = DOUBLE_TYPE;
+        }
+        else {
+            printf("*: contract violation\n"
+                   "  expected: number?");
+        }
+        current = cdr(current);
+    }
+    if (value->type == DOUBLE_TYPE) {
+        value->d = resulti * resultd;
+    }
+    else {
+        value->i = resulti;
+    }
+    return value;
+
+}
+
+// Primitive function for dividing two numbers.
+Value *primitiveDivide(Value *args) {
+    args = car(args);
+    Value *value = makeNull();
+    value->type = INT_TYPE;
+    Value *first = makeNull();
+    Value *second = makeNull();
+    if (length(args) == 1) {
+        first->type = INT_TYPE;
+        first->i = 1;
+        second = car(args);
+    }
+    else if (length(args) == 0) {
+        printf("/: arity mismatch;\n"
+               " the expected number of arguments does not match the given number\n"
+               "  expected: at least 1");
+        texit(1);
+    }
+    else if (length(args) >2) {
+        printf("/: arity mismatch;\n"
+               " the expected number of arguments does not match the given number\n"
+               "  expected: 2 or less");
+        texit(1);
+    }
+    else {
+        first = car(args);
+        second = car(cdr(args));
+    }
+    if ((second->type == INT_TYPE && second->i == 0) || (second->type == DOUBLE_TYPE && second->d == 0)) {
+        printf("/: division by zero");
+        texit(1);
+    }
+    if (first->type == INT_TYPE && second->type == INT_TYPE) {
+        if (first->i % second->i == 0) {
+            value->i = first->i/second->i;
+        }
+        else {
+            value->type = DOUBLE_TYPE;
+            value->d = (float)first->i/(float)second->i;
+        }
+    }
+    else {
+        if (first->type == INT_TYPE && second->type == DOUBLE_TYPE) {
+            value->type = DOUBLE_TYPE;
+            value->d = (float)first->i/second->d;
+        }
+        else if (first->type == DOUBLE_TYPE && second->type == INT_TYPE) {
+            value->type = DOUBLE_TYPE;
+            value->d = first->d/(float)second->i;
+        }
+        else {
+            value->type = DOUBLE_TYPE;
+            value->d = first->d/second->d;
+        }
+    }
+    return value;
+}
 // Primitive function for checking if something is nothing (whaaa? ¯\_(ツ)_/¯)
 Value *primitiveNull(Value *args) {
     if (length(args) != 1) {
@@ -602,11 +690,21 @@ void interpret(Value *tree) {
     bind(">", primitiveGreaterThan, global);
     bind("<", primitiveLessThan, global);
     bind("list", primitiveList, global);
+    bind("*", primitiveMult, global);
+    bind("/", primitiveDivide, global);
 
 
     while(current->type != NULL_TYPE) {
         Value *result = eval(car(current), global);
-        if (result->type != VOID_TYPE) {
+        if (result->type == SINGLE_QUOTE_TYPE) {
+            current = cdr(current);
+            Value *quote = makeNull();
+            quote->type = SYMBOL_TYPE;
+            quote->s = "quote";
+            result = cons(quote, cons(current, makeNull()));
+            printTree(eval(result, global));
+        }
+        else if (result->type != VOID_TYPE) {
             printTree(result);
             printf("\n");
         }
@@ -632,6 +730,9 @@ Value *eval(Value *expr, Frame *frame) {
         }
         case SYMBOL_TYPE: {
             return lookUpSymbol(expr, frame);
+        }
+        case SINGLE_QUOTE_TYPE: {
+            return expr;
         }
         case CONS_TYPE: {
             Value *first = car(expr);

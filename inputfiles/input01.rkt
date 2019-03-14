@@ -1,1 +1,1 @@
-(let ((x "string")) (display x))
+(/ 0 0)
