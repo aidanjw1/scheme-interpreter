@@ -168,6 +168,8 @@ void printToken(Value *token) {
         case NULL_TYPE:
             printf("()");
             break;
+        case VOID_TYPE:
+            break;
         default:
             printf("Another token type");
             break;

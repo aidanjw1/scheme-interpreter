@@ -66,6 +66,68 @@ Value *evalIf(Value *args, Frame *frame) {
     }
 }
 
+// Takes multiple condition, expression pairs. Return first expression whose condition is true, or the default.
+Value *evalCond(Value *args, Frame *frame) {
+    Value *current = args;
+    while(current->type != NULL_TYPE) {
+        Value *arg = car(current);
+        if(length(arg) != 2) {
+            printf("cond: error...");
+            texit(1);
+        }
+        if(car(arg)->type == SYMBOL_TYPE && !strcmp(car(arg)->s, "else")) {
+            return eval(car(cdr(arg)), frame);
+        }
+        Value *condition = eval(car(arg), frame);
+        Value *expr = eval(car(cdr(arg)), frame);
+        if(condition->type != BOOL_TYPE) {
+            printf("cond: argument not boolean");
+            texit(1);
+        }
+        if(!strcmp(condition->s, "#f")) {
+            current = cdr(current);
+        }
+        else {
+            return expr;
+        }
+    }
+    Value *v = makeNull();
+    v->type = VOID_TYPE;
+    return v;
+}
+
+// Take a bound variable, rebinds it to a new expression
+Value *evalSet(Value* args, Frame *frame) {
+    if (length(args) != 2) {
+        printf(" set!: bad syntax ");
+        texit(1);
+    }
+
+    Value *v = makeNull();
+    v->type = VOID_TYPE;
+
+    Value *var = car(args);
+    Value *expr = eval(car(cdr(args)), frame);
+    Value *bindings = frame->bindings;
+
+    while (bindings->type != NULL_TYPE) {
+        Value *param1 = car(car(bindings));
+        if (!strcmp(param1->s, var->s)) {
+            car(bindings)->c.cdr = cons(expr, makeNull());
+            return v;
+        }
+        bindings = cdr(bindings);
+    }
+    if (frame->parent != NULL){
+        return evalSet(args, frame->parent);
+    }
+    else {
+        printf("%s: undefined; cannot reference an identifier before its definition", var->s);
+        texit(1);
+        return v;
+    }
+}
+
 // Evaluates the arguments of a let statement
 // Creates a set of bindings, evaluates the al other arguments
 // Returns the last argument
@@ -105,6 +167,111 @@ Value *evalLet(Value* args, Frame *frame) {
     while (body->type != NULL_TYPE) {
         result = eval(car(body), newFrame);
         body = cdr(body);
+    }
+    return result;
+}
+
+// Evaluates the val-exprs one by one, creating a location for each id as soon as the value is available.
+Value *evalLetStar(Value *args, Frame *frame) {
+    if (length(args) < 2) {
+        printf("let*: bad syntax (missing binding pairs or body)");
+        texit(1);
+    }
+    Frame *newFrame = talloc(sizeof(Frame));
+    newFrame->parent = frame;
+    newFrame->bindings = makeNull();
+
+    Value *letBindings = car(args);
+    Value *body = cdr(args);
+
+    Value *current = letBindings;
+    while(current->type != NULL_TYPE) {
+        Value *binding = car(current);
+        if(length(binding) == 2 && car(binding)->type == SYMBOL_TYPE) {
+            if (symbolDefined(car(binding), newFrame->bindings)) {
+                printf("let*: duplicate identifier in: %s", car(binding)->s);
+                texit(1);
+            }
+            if (car(cdr(binding))->type == SYMBOL_TYPE || car(cdr(binding))->type == CONS_TYPE) {
+                Value *test = cons(eval(car(cdr(binding)), newFrame), makeNull());
+                binding = cons(car(binding), test);
+            }
+            newFrame->bindings = cons(binding, newFrame->bindings);
+            current = cdr(current);
+        }
+        else {
+            printf("let*: bad syntax (not an identifier)");
+            texit(1);
+        }
+    }
+    Value *result = makeNull();
+    while (body->type != NULL_TYPE) {
+        result = eval(car(body), newFrame);
+        body = cdr(body);
+    }
+    return result;
+}
+
+
+//Like let, including left-to-right evaluation of the val-exprs,
+// but the locations for all ids are created first, all ids are bound in all val-exprs as well as the bodys,
+// and each id is initialized immediately after the corresponding val-expr is evaluated.
+Value *evalLetRec(Value *args, Frame *frame) {
+    if (length(args) < 2) {
+        printf("letrec: bad syntax (missing binding pairs or body)");
+        texit(1);
+    }
+    Frame *newFrame = talloc(sizeof(Frame));
+    newFrame->parent = frame;
+    newFrame->bindings = makeNull();
+
+    Value *letBindings = car(args);
+    Value *body = cdr(args);
+
+    Value *current = letBindings;
+    while(current->type != NULL_TYPE) {
+        Value *binding = car(current);
+        if(length(binding) == 2 && car(binding)->type == SYMBOL_TYPE) {
+            if (symbolDefined(car(binding), newFrame->bindings)) {
+                printf("letrec: duplicate identifier in: %s", car(binding)->s);
+                texit(1);
+            }
+            if (car(cdr(binding))->type == SYMBOL_TYPE || car(cdr(binding))->type == CONS_TYPE) {
+                //Value *test = cons(eval(car(cdr(binding)), newFrame), makeNull());
+                binding = cons(car(binding), cons(makeNull(), makeNull()));
+            }
+            newFrame->bindings = cons(binding, newFrame->bindings);
+            current = cdr(current);
+        }
+        else {
+            printf("letrec: bad syntax (not an identifier)");
+            texit(1);
+        }
+    }
+    current = letBindings;
+    while(current->type != NULL_TYPE) {
+        Value *binding = car(current);
+        evalSet(binding, newFrame);
+        current = cdr(current);
+    }
+    Value *result = makeNull();
+    while (body->type != NULL_TYPE) {
+        result = eval(car(body), newFrame);
+        body = cdr(body);
+    }
+    return result;
+}
+
+
+// Evaluates all expressions, returns the last one
+Value *evalBegin(Value* args, Frame *frame) {
+    Value *whenArgs = args;
+    Value *result = makeNull();
+    result->type = VOID_TYPE;
+
+    while (whenArgs->type != NULL_TYPE) {
+        result = eval(car(whenArgs),  frame);
+        whenArgs = cdr(whenArgs);
     }
     return result;
 }
@@ -189,6 +356,48 @@ Value *evalDisplay(Value *args, Frame *frame) {
         printTree(result);
         return new;
     }
+}
+
+// Evaluates and of any number of boolean parameters.
+Value *evalAnd(Value *args, Frame *frame) {
+    Value *result = makeNull();
+    result->type = BOOL_TYPE;
+    result->s = "#t";
+
+    Value *current = args;
+    while(current->type != NULL_TYPE) {
+        Value *arg = eval(car(current), frame);
+        if (arg->type != BOOL_TYPE) {
+            printf("and: arguments not boolean type");
+            texit(1);
+        }
+        else if (!strcmp(arg->s,"#f")) {
+            return arg;
+        }
+        current = cdr(current);
+    }
+    return result;
+}
+
+// Evaluates or of any number of boolean parameters
+Value *evalOr(Value *args, Frame *frame) {
+    Value *result = makeNull();
+    result->type = BOOL_TYPE;
+    result->s = "#f";
+
+    Value *current = args;
+    while(current->type != NULL_TYPE) {
+        Value *arg = eval(car(current), frame);
+        if (arg->type != BOOL_TYPE) {
+            printf("and: arguments not boolean type");
+            texit(1);
+        }
+        else if (!strcmp(arg->s,"#t")) {
+            return arg;
+        }
+        current = cdr(current);
+    }
+    return result;
 }
 
 // Evaluates argument of a lambda function
@@ -347,8 +556,8 @@ Value *primitiveAdd(Value *args) {
 
 // Primitive function for subtracting numbers.
 Value *primitiveSubtract(Value *args) {
-    int resulti;
-    double resultd;
+    int resulti = 0;
+    double resultd = 0;
     Value *current = car(args);
     Value *value = makeNull();
     value->type = INT_TYPE;
@@ -482,6 +691,37 @@ Value *primitiveDivide(Value *args) {
     }
     return value;
 }
+
+// Primitive function for mod
+Value *primitiveModulo(Value *args) {
+    args = car(args);
+
+    if(length(args) != 2) {
+        printf("modulo: arity mismatch;\n"
+               " the expected number of arguments does not match the given number");
+        texit(1);
+    }
+
+    Value *first = car(args);
+    Value *second = car(cdr(args));
+
+    if(!(first->type == INT_TYPE && second->type == INT_TYPE)) {
+        printf("modulo: contract violation\n"
+               "  expected: integer?");
+        texit(1);
+    }
+
+    if(second->i == 0) {
+        printf("modulo: undefined for 0");
+        texit(1);
+    }
+
+    Value *val = makeNull();
+    val->type = INT_TYPE;
+    val->i = first->i % second->i;
+    return val;
+}
+
 // Primitive function for checking if something is nothing (whaaa? ¯\_(ツ)_/¯)
 Value *primitiveNull(Value *args) {
     args = car(args);
@@ -700,6 +940,39 @@ Value *primitiveGreaterThan(Value *args) {
     return valueT;
 }
 
+// Primitive function for >=. Compare integer values.
+Value *primitiveGreaterThanOrEqual(Value *args) {
+    args = car(args);
+    Value *valueT = makeNull();
+    valueT->type = BOOL_TYPE;
+    valueT->s = "#t";
+    Value *valueF = makeNull();
+    valueF->type = BOOL_TYPE;
+    valueF->s = "#f";
+
+    if(length(args) == 0) {
+        printf(">: arity mismatch;\n"
+               " the expected number of arguments does not match the given number");
+        texit(1);
+    }
+
+    Value *current = args;
+    int previous = car(current)->i;
+    while(current->type != NULL_TYPE) {
+        if(car(current)->type != INT_TYPE) {
+            printf(">: contract violation\n"
+                   "  expected: number?");
+            texit(1);
+        }
+        if(car(current)->i > previous) {
+            return valueF;
+        }
+        previous = car(current)->i;
+        current = cdr(current);
+    }
+    return valueT;
+}
+
 // Primitive function for <. Compare integer values
 Value *primitiveLessThan(Value *args) {
     args = car(args);
@@ -733,6 +1006,78 @@ Value *primitiveLessThan(Value *args) {
     return valueT;
 }
 
+// Primitive function for <=. Compare integer values
+Value *primitiveLessThanOrEqual(Value *args) {
+    args = car(args);
+    Value *valueT = makeNull();
+    valueT->type = BOOL_TYPE;
+    valueT->s = "#t";
+    Value *valueF = makeNull();
+    valueF->type = BOOL_TYPE;
+    valueF->s = "#f";
+
+    if(length(args) == 0) {
+        printf("<: arity mismatch;\n"
+               " the expected number of arguments does not match the given number");
+        texit(1);
+    }
+
+    Value *current = args;
+    int previous = car(current)->i;
+    while(current->type != NULL_TYPE) {
+        if(car(current)->type != INT_TYPE) {
+            printf("<: contract violation\n"
+                   "  expected: number?");
+            texit(1);
+        }
+        if(car(current)->i < previous) {
+            return valueF;
+        }
+        previous = car(current)->i;
+        current = cdr(current);
+    }
+    return valueT;
+}
+
+// Primitive function for loading and interpreting a file,
+// given an input path in string form
+Value *primitiveLoadFile(Value *args) {
+    args = car(args);
+    if(length(args) != 1) {
+        printf("loadfile expected 1 argument");
+        texit(1);
+    }
+    if(car(args)->type != STR_TYPE) {
+        printf("loadfile expected string argument");
+    }
+
+    Value *arg = car(args);
+
+    char *newString = talloc(sizeof(char[255]));
+    newString[0] = '\0';
+    if (arg->s[1] == '"') {
+        newString = "\0";
+    }
+    else {
+        int current = 1;
+        while (arg->s[current] != '"') {
+            newString[current-1] = arg->s[current];
+            ++current;
+        }
+        newString[current-1] = '\0';
+    }
+
+    char *inputFileName = newString;
+//    char fullInputPath[2000];
+//    strcpy(fullInputPath, "../inputfiles/");
+//    strcat(fullInputPath, inputFileName);
+//    printf("Input filename is %s\n", fullInputPath);
+
+    Value *list = tokenize(inputFileName);
+    Value *tree = parse(list);
+    return tree;
+}
+
 
 // Calls evaluation on the parse tree,
 // Prints out each evaluation to a new line.
@@ -756,19 +1101,15 @@ void interpret(Value *tree) {
     bind("*", primitiveMult, global);
     bind("/", primitiveDivide, global);
     bind("-", primitiveSubtract, global);
+    bind(">=", primitiveGreaterThanOrEqual, global);
+    bind("<=", primitiveLessThanOrEqual, global);
+    bind("modulo", primitiveModulo, global);
+    bind("loadfile", primitiveLoadFile, global);
 
 
     while(current->type != NULL_TYPE) {
         Value *result = eval(car(current), global);
-        if (result->type == SINGLE_QUOTE_TYPE) {
-            current = cdr(current);
-            Value *quote = makeNull();
-            quote->type = SYMBOL_TYPE;
-            quote->s = "quote";
-            result = cons(quote, cons(current, makeNull()));
-            printTree(eval(result, global));
-        }
-        else if (result->type != VOID_TYPE) {
+        if (result->type != VOID_TYPE) {
             printTree(result);
             printf("\n");
         }
@@ -821,6 +1162,14 @@ Value *eval(Value *expr, Frame *frame) {
                 result = evalLet(args,frame);
                 return result;
             }
+            else if (!strcmp(first->s,"let*")) {
+                result = evalLetStar(args,frame);
+                return result;
+            }
+            else if (!strcmp(first->s,"letrec")) {
+                result = evalLetRec(args,frame);
+                return result;
+            }
 
             else if (!strcmp(first->s,"display")) {
                 result = evalDisplay(cdr(expr), frame);
@@ -849,8 +1198,28 @@ Value *eval(Value *expr, Frame *frame) {
                 return evalDefine(cdr(expr), frame);
             }
 
+            else if (!strcmp(first->s,"set!")) {
+                return evalSet(cdr(expr), frame);
+            }
+
             else if (!strcmp(first->s,"lambda")) {
                 return evalLambda(cdr(expr), frame);
+            }
+
+            else if (!strcmp(first->s,"and")) {
+                return evalAnd(cdr(expr), frame);
+            }
+
+            else if (!strcmp(first->s,"or")) {
+                return evalOr(cdr(expr), frame);
+            }
+
+            else if (!strcmp(first->s,"begin")) {
+                return evalBegin(cdr(expr), frame);
+            }
+
+            else if (!strcmp(first->s,"cond")) {
+                return evalCond(cdr(expr), frame);
             }
 
             else {
@@ -859,6 +1228,20 @@ Value *eval(Value *expr, Frame *frame) {
                 Value *evaledOperator = eval(first, frame);
                 Value *evaledArgs = evalEach(args, frame);
                 if (evaledOperator->type == PRIMITIVE_TYPE) {
+                    if (!strcmp(first->s, "loadfile")) {
+                        Value *current = evaledOperator->pf(evaledArgs);
+                        while(current->type != NULL_TYPE) {
+                            Value *result1 = eval(car(current), frame);
+                            if (result1->type != VOID_TYPE) {
+                                printTree(result1);
+                                printf("\n");
+                            }
+                            current = cdr(current);
+                        }
+                        Value *v = makeNull();
+                        v->type = VOID_TYPE;
+                        return v;
+                    }
                     return evaledOperator->pf(evaledArgs);
                 }
                 return apply(evaledOperator,evaledArgs);
